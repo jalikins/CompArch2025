@@ -13,15 +13,15 @@ module top(
     logic [2:0] color_state = RED; // Start with RED
 
     parameter RED = 3'b011;      // R on
-    parameter YELLOW = 3'b001;   // R and G on
-    parameter GREEN = 3'b101;    // G on
-    parameter CYAN = 3'b100;     // G and B on
-    parameter BLUE = 3'b110;     // B on
-    parameter MAGENTA = 3'b010;  // R and B on
+    parameter YELLOW = 3'b001;   // R and G 
+    parameter GREEN = 3'b101;    // G 
+    parameter CYAN = 3'b100;     // G and B 
+    parameter BLUE = 3'b110;     // B 
+    parameter MAGENTA = 3'b010;  // R and B 
 
 
     logic [20:0] count = 0; // BLINK_INTERVAL counter
-    logic [2:0] color_state = RED; // defining the current state
+    logic [2:0] color_state = RED; 
 
     always_ff @(posedge clk) begin
         if (count == COLOR_INTERVAL - 1) begin
