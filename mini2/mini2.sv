@@ -1,104 +1,97 @@
-//
-// Module: rgb_controller
-// Description: Top-level module to control a breathing RGB LED.
-//              It instantiates three color faders, each with a different
-//              phase, and three PWM generators to drive the RGB outputs.
-//
+`include "fade.sv"
+`include "pwm.sv"
 
-`include "color_fader.sv"
-`include "pwm_generator.sv"
-
-module top (
-    input   logic clk,
-    output  logic RGB_R,
-    output  logic RGB_G,
-    output  logic RGB_B
+module top #(
+    parameter PWM_INTERVAL = 1200       // CLK frequency is 12MHz, so 1,200 cycles is 100us
+)(
+    input  logic clk,       // 12MHz clock input
+    output logic RGB_R,
+    output logic RGB_G,
+    output logic RGB_B
 );
 
-    //-- Timing and Phase Configuration --//
-    parameter PWM_PERIOD             = 1200; // Defines the resolution of the PWM signal
-    localparam OFF_STATE_DURATION     = 800;  // Duration the LED stays fully off
-    localparam RAMP_STATE_DURATION    = 400;  // Duration for the fade-in/fade-out ramp
-    localparam ON_STATE_DURATION      = 800;  // Duration the LED stays fully on
-    localparam FADE_UPDATE_RATE       = 5000; // Clock cycles between each fade step
+    logic [$clog2(PWM_INTERVAL) - 1:0] pwm_value;
+    localparam [1:0] FADE_RED   = 2'b00;
+    localparam [1:0] FADE_GREEN = 2'b01;
+    localparam [1:0] FADE_BLUE  = 2'b10;
+
+
+    logic [1:0] currentState; // Green fades first because we start with Red on
+    logic [2:0] prev_LEDs = 3'b011; // Start with RED on
+    logic [2:0] current_LEDs; // Declaration of current_LEDs
+
+
+    logic pwm_out;
+
+    fade #(
+        .PWM_INTERVAL   (PWM_INTERVAL)
+    ) u1 (
+        .clk            (clk),
+        .pwm_value      (pwm_value),
+        .currentState (currentState),
+        .pwm_state (pwm_state)
+    );
+
+    pwm #(
+        .PWM_INTERVAL   (PWM_INTERVAL)
+    ) u2 (
+        .clk            (clk),
+        .pwm_value      (pwm_value),
+        .pwm_out        (pwm_out)
+    );
+
+    always_comb begin
+        // Default to turning all LEDs off (assign '1' for active-low)
+        // All LEDs off
+        current_LEDs = 3'bxxx;
+        case (currentState) // All off by default
+            FADE_RED: begin
+                // Connect the PWM signal to the RED LED.
+                // The other LEDs remain off because of the default assignment above.
+                if (pwm_state) begin // AND condition inside a specific case
+                    current_LEDs[0] = ~pwm_out;
+                    current_LEDs[1] = 1;
+                    current_LEDs[2] = 0;
+                    end else begin
+                    current_LEDs[0] = ~pwm_out;
+                    current_LEDs[1] = 0;
+                    current_LEDs[2] = 1;
+                end
+
+            end
+
+            FADE_GREEN: begin
+                // Connect the PWM signal to the GREEN LED.
+                if (pwm_state) begin // AND condition inside a specific case
+                    current_LEDs[0] = 0;
+                    current_LEDs[1] = ~pwm_out;
+                    current_LEDs[2] = 1;
+                    end else begin
+                    current_LEDs[0] = 1;
+                    current_LEDs[1] = ~pwm_out;
+                    current_LEDs[2] = 0;
+                end
+            end
+
+            FADE_BLUE: begin
+                // Connect the PWM signal to the BLUE LED.
+                if (pwm_state) begin // AND condition inside a specific case
+                    current_LEDs[0] = 1;
+                    current_LEDs[1] = 0;
+                    current_LEDs[2] = ~pwm_out;
+                    end else begin
+                    current_LEDs[0] = 0;
+                    current_LEDs[1] = 1;
+                    current_LEDs[2] = ~pwm_out;
+                end
+            end
+        endcase
+    end
     
-    // Phase shifts for the color channels (120 and 240 degrees)
-    localparam PHASE_OFFSET_120_DEG   = RAMP_STATE_DURATION * 2;
-    localparam PHASE_OFFSET_240_DEG   = RAMP_STATE_DURATION * 4;
+    always_ff @(posedge clk) begin
+        prev_LEDs <= current_LEDs;
+    end
 
-    //-- Internal Wires --//
-    wire [10:0] duty_cycle_red;
-    wire [10:0] duty_cycle_green;
-    wire [10:0] duty_cycle_blue;
-
-    wire pwm_out_red;
-    wire pwm_out_green;
-    wire pwm_out_blue;
-
-    //-- Module Instantiations --//
-
-    // Red Channel Fader (0° phase offset, but reversed for active-low)
-    color_fader #(
-        .PWM_MAX_VALUE          (PWM_PERIOD),
-        .FADE_CLOCK_DIVIDER     (FADE_UPDATE_RATE),
-        .DURATION_OFF_STATE     (OFF_STATE_DURATION),
-        .DURATION_RAMP_STATE    (RAMP_STATE_DURATION),
-        .DURATION_ON_STATE      (ON_STATE_DURATION),
-        .STARTING_PHASE_OFFSET  (PHASE_OFFSET_240_DEG)
-    ) fader_r (
-        .clk                    (clk),
-        .current_duty_cycle     (duty_cycle_red)
-    );
-
-    // Green Channel Fader (120° phase offset)
-    color_fader #(
-        .PWM_MAX_VALUE          (PWM_PERIOD),
-        .FADE_CLOCK_DIVIDER     (FADE_UPDATE_RATE),
-        .DURATION_OFF_STATE     (OFF_STATE_DURATION),
-        .DURATION_RAMP_STATE    (RAMP_STATE_DURATION),
-        .DURATION_ON_STATE      (ON_STATE_DURATION),
-        .STARTING_PHASE_OFFSET  (PHASE_OFFSET_120_DEG)
-    ) fader_g (
-        .clk                    (clk),
-        .current_duty_cycle     (duty_cycle_green)
-    );
-
-    // Blue Channel Fader (240° phase offset)
-    color_fader #(
-        .PWM_MAX_VALUE          (PWM_PERIOD),
-        .FADE_CLOCK_DIVIDER     (FADE_UPDATE_RATE),
-        .DURATION_OFF_STATE     (OFF_STATE_DURATION),
-        .DURATION_RAMP_STATE    (RAMP_STATE_DURATION),
-        .DURATION_ON_STATE      (ON_STATE_DURATION),
-        .STARTING_PHASE_OFFSET  (0)
-    ) fader_b (
-        .clk                    (clk),
-        .current_duty_cycle     (duty_cycle_blue)
-    );
-
-    // PWM Generators for each color channel
-    pwm_generator #( .PWM_COUNTER_MAX(PWM_PERIOD) ) pwm_r (
-        .clk                (clk),
-        .target_duty_cycle  (duty_cycle_red),
-        .pwm_output         (pwm_out_red)
-    );
-
-    pwm_generator #( .PWM_COUNTER_MAX(PWM_PERIOD) ) pwm_g (
-        .clk                (clk),
-        .target_duty_cycle  (duty_cycle_green),
-        .pwm_output         (pwm_out_green)
-    );
-
-    pwm_generator #( .PWM_COUNTER_MAX(PWM_PERIOD) ) pwm_b (
-        .clk                (clk),
-        .target_duty_cycle  (duty_cycle_blue),
-        .pwm_output         (pwm_out_blue)
-    );
-
-    //-- Output Assignments --//
-    // Invert the PWM signals for active-low LEDs
-    assign RGB_R = ~pwm_out_red;
-    assign RGB_G = ~pwm_out_green;
-    assign RGB_B = ~pwm_out_blue;
+    assign {RGB_R, RGB_G, RGB_B} = current_LEDs;
 
 endmodule

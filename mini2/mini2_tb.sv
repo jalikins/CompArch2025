@@ -3,13 +3,13 @@
 
 module mini2_tb;
 
-    parameter PWM_PERIOD = 1200;
+    parameter PWM_INTERVAL = 1200;
 
     logic clk = 0;
     logic RGB_R, RGB_G, RGB_B;
 
     top # (
-        .PWM_PERIOD   (PWM_PERIOD)
+        .PWM_INTERVAL   (PWM_INTERVAL)
     ) u0 (
         .clk            (clk), 
         .RGB_R            (RGB_R),
